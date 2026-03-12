@@ -1,0 +1,20 @@
+{
+  "name": "samajika_madhyama",
+  "private": true,
+  "packageManager": "pnpm@9.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "kill": "bash scripts/kill-ports.sh"
+  },
+  "devDependencies": {
+    "drizzle-orm": "^0.30.10",
+    "turbo": "^2.0.0"
+  }
+}
