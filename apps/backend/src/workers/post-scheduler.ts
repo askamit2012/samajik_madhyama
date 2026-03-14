@@ -84,7 +84,9 @@ async function publishPost(platform: string, content: string, accessToken: strin
 // ============================================================
 // Scheduled Post Claim & Publish Ticker
 // ============================================================
-export async function runSchedulerTick(): Promise<void> {
+export type SchedulerTickResult = { due: number; published: number; failed: number }
+
+export async function runSchedulerTick(): Promise<SchedulerTickResult> {
   const now = new Date()
 
   const duePosts = await db.select().from(schema.posts)
@@ -95,9 +97,12 @@ export async function runSchedulerTick(): Promise<void> {
       )
     )
 
-  if (duePosts.length === 0) return
+  if (duePosts.length === 0) return { due: 0, published: 0, failed: 0 }
 
   console.log(`[post-scheduler] ${duePosts.length} posts due. Publishing...`)
+
+  let published = 0
+  let failed = 0
 
   for (const post of duePosts) {
     try {
@@ -126,13 +131,17 @@ export async function runSchedulerTick(): Promise<void> {
         .where(eq(schema.posts.id, post.id))
 
       console.log(`[post-scheduler] Published post #${post.id} to ${post.platform}`)
+      published++
     } catch (err: any) {
       console.error(`[post-scheduler] Failed post #${post.id}:`, err.message)
       await db.update(schema.posts)
         .set({ status: "failed", updatedAt: new Date() })
         .where(eq(schema.posts.id, post.id))
+      failed++
     }
   }
+
+  return { due: duePosts.length, published, failed }
 }
 
 // ============================================================

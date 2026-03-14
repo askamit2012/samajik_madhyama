@@ -2,7 +2,10 @@ import { Queue, QueueEvents } from "bullmq"
 
 // BullMQ accepts a Redis URL string directly — avoids ioredis version conflicts
 const redisUrl = process.env.REDIS_URL || "redis://localhost:6379"
-const connection = { url: redisUrl }
+const connection = { 
+  url: redisUrl,
+  maxRetriesPerRequest: null, // Recommended for BullMQ
+}
 
 // ============================================================
 // CAMPAIGN QUEUE

@@ -65,6 +65,10 @@ Optional:
 
 - `SMTP_USER_*`, `SMTP_PASS_*`, `SMTP_HOST_*`, `SMTP_PORT_*`
 
+Demo-only:
+
+- `OPS_TRIGGER_TOKEN_*` (optional; enables protected on-demand ops triggers)
+
 ## GitHub Actions configuration
 
 Workflow: `.github/workflows/deploy-cloudrun.yml`
@@ -87,3 +91,7 @@ After Cloud Run deploy, set in Vercel (per environment project):
 
 - `apps/user`: `NEXT_PUBLIC_API_URL=https://<cloud-run-url>`
 - `apps/admin`: `VITE_API_URL=https://<cloud-run-url>`
+
+## $0 demo mode (no always-on worker)
+
+If you keep `DEPLOY_BACKEND_WORKER` disabled, you can still demo background features by enabling `OPS_TRIGGER_TOKEN` and calling the ops endpoints documented in `docs/deployment/demo-ops.md`.

@@ -38,6 +38,7 @@ app.get("/health", (_req, res) => {
 async function main(): Promise<void> {
   if (enableApi) {
     // ========== Routes ==========
+    const { default: opsRouter } = await import("./routes/ops")
     const { contactsRouter } = await import("./routes/contacts")
     const { templatesRouter } = await import("./routes/templates")
     const { default: oauthRouter } = await import("./routes/oauth")
@@ -50,6 +51,7 @@ async function main(): Promise<void> {
     const { default: aiSettingsRouter } = await import("./routes/ai-settings")
     const { default: aiRouter } = await import("./routes/ai")
 
+    app.use("/ops", opsRouter)
     app.use("/contacts", contactsRouter)
     app.use("/templates", templatesRouter)
     app.use("/oauth", oauthRouter)
