@@ -1,27 +1,18 @@
 import { Router } from "express"
 import { db, schema } from "@repo/database"
-import { eq, inArray } from "drizzle-orm"
+import { eq } from "drizzle-orm"
 import { authenticate, AuthRequest } from "../middleware/auth"
-import nodemailer from "nodemailer"
+import { validate, campaignSendSchema } from "../middleware/validate"
+import { campaignQueue } from "../workers/queues"
 
 const router: Router = Router()
 
-// Configure Mailtrap transporter (Sandbox)
-const transporter = nodemailer.createTransport({
-  host: "sandbox.smtp.mailtrap.io",
-  port: 2525,
-  auth: {
-    user: process.env.MAILTRAP_USER || "test_user",
-    pass: process.env.MAILTRAP_PASS || "test_pass"
-  }
-})
-
-// Get all campaigns for a user
+// GET /campaigns — list campaigns for the authenticated user
 router.get("/", authenticate, async (req: AuthRequest, res) => {
   try {
     const campaignsList = await db.query.campaigns.findMany({
       where: eq(schema.campaigns.ownerId, req.user!.id),
-      orderBy: (campaigns, { desc }) => [desc(campaigns.createdAt)]
+      orderBy: (campaigns, { desc }) => [desc(campaigns.createdAt)],
     })
     res.json(campaignsList)
   } catch (error) {
@@ -30,83 +21,77 @@ router.get("/", authenticate, async (req: AuthRequest, res) => {
   }
 })
 
-// Create and Send Campaign
-router.post("/send", authenticate, async (req: AuthRequest, res) => {
+// GET /campaigns/:id/status — get campaign + job progress
+router.get("/:id/status", authenticate, async (req: AuthRequest, res) => {
+  try {
+    const campaign = await db.query.campaigns.findFirst({
+      where: eq(schema.campaigns.id, parseInt(req.params.id)),
+    })
+    if (!campaign || campaign.ownerId !== req.user!.id) {
+      return res.status(404).json({ error: "Campaign not found" })
+    }
+
+    // Fetch BullMQ job state if jobId is stored
+    let jobProgress: number | null = null
+    if ((campaign as any).jobId) {
+      const job = await campaignQueue.getJob((campaign as any).jobId)
+      if (job) jobProgress = await job.progress as number
+    }
+
+    res.json({ ...campaign, jobProgress })
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch campaign status" })
+  }
+})
+
+// POST /campaigns/send — create campaign + enqueue for async sending
+router.post("/send", authenticate, validate(campaignSendSchema), async (req: AuthRequest, res) => {
   try {
     const { name, subject, templateId, contactIds } = req.body
 
-    if (!name || !subject || !templateId || !contactIds || !Array.isArray(contactIds) || contactIds.length === 0) {
-      return res.status(400).json({ error: "Missing required fields or no contacts selected" })
-    }
-
-    // 1. Fetch Template
-    const templates = await db.select().from(schema.emailTemplates)
+    // 1. Verify template ownership
+    const [template] = await db.select().from(schema.emailTemplates)
       .where(eq(schema.emailTemplates.id, templateId))
       .limit(1)
-      
-    if (templates.length === 0 || templates[0].ownerId !== req.user!.id) {
+
+    if (!template || template.ownerId !== req.user!.id) {
       return res.status(404).json({ error: "Template not found" })
     }
-    const template = templates[0]
 
-    // 2. Create Campaign Record
-    const newCampaign = await db.insert(schema.campaigns).values({
+    // 2. Create campaign record (status = queued)
+    const [campaign] = await db.insert(schema.campaigns).values({
       name,
       subject,
       templateId,
       ownerId: req.user!.id,
-      status: "sending"
+      status: "queued",
     }).returning()
-    const campaignId = newCampaign[0].id
 
-    // 3. Fetch Contacts
-    const recipients = await db.select().from(schema.contacts)
-      .where(inArray(schema.contacts.id, contactIds))
-    
-    // Filter out contacts that do not belong to the user
-    const validRecipients = recipients.filter(c => c.ownerId === req.user!.id)
-
-    // 4. Send Emails via Nodemailer
-    const promises = validRecipients.map(async (contact) => {
-      try {
-        await transporter.sendMail({
-          from: '"SocialApp Admin" <admin@socialapp.local>',
-          to: contact.email,
-          subject: subject,
-          html: template.htmlContent, // Simplistic without merge-tags for now
-          text: template.plainText || undefined
-        })
-        
-        // Log Success
-        await db.insert(schema.campaignRecipients).values({
-          campaignId,
-          contactId: contact.id,
-          status: "sent",
-          sentAt: new Date()
-        })
-      } catch (err: any) {
-        console.error(`Failed to send email to ${contact.email}:`, err)
-        // Log Failure
-        await db.insert(schema.campaignRecipients).values({
-          campaignId,
-          contactId: contact.id,
-          status: "failed",
-          error: err.message
-        })
+    // 3. Enqueue the campaign job — returns immediately
+    const job = await campaignQueue.add(
+      "send-campaign",
+      {
+        campaignId: campaign.id,
+        userId: req.user!.id,
+        templateId,
+        contactIds,
+      },
+      {
+        // Priority: lower number = higher priority
+        priority: 1,
       }
+    )
+
+    console.log(`[campaigns] Enqueued campaign #${campaign.id} as job ${job.id}`)
+
+    res.status(202).json({
+      message: "Campaign queued for sending",
+      campaignId: campaign.id,
+      jobId: job.id,
     })
-
-    await Promise.allSettled(promises)
-
-    // 5. Mark Campaign Completed
-    await db.update(schema.campaigns)
-      .set({ status: "completed", sentAt: new Date() })
-      .where(eq(schema.campaigns.id, campaignId))
-
-    res.status(200).json({ message: "Campaign sent successfully", campaignId })
   } catch (error) {
-    console.error("Error sending campaign:", error)
-    res.status(500).json({ error: "Failed to send campaign" })
+    console.error("Error queueing campaign:", error)
+    res.status(500).json({ error: "Failed to queue campaign" })
   }
 })
 

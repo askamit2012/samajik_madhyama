@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react"
 import { useRouter, usePathname } from "next/navigation"
+import { api } from "../lib/api"
 
 type User = {
   id: number
@@ -47,15 +48,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUser = async (authToken: string) => {
     try {
-      const res = await fetch("http://localhost:4000/auth/me", {
-        headers: { "Authorization": `Bearer ${authToken}` }
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setUser(data.user)
-      } else {
-        doLogout()
-      }
+      const data = await api.get<{ user: User }>("/auth/me", authToken)
+      setUser(data.user)
     } catch {
       doLogout()
     } finally {

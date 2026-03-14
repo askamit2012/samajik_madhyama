@@ -1,0 +1,96 @@
+name: Deploy (Vercel)
+
+on:
+  push:
+    branches: [ dev, qa, prd ]
+  workflow_dispatch: {}
+
+concurrency:
+  group: vercel-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-user:
+    name: Deploy user app
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: apps/user
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies (monorepo)
+        run: pnpm install --frozen-lockfile
+        working-directory: .
+
+      - name: Select Vercel project (user)
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            dev) echo "VERCEL_PROJECT_ID=${{ secrets.VERCEL_PROJECT_ID_USER_DEV }}" >> "$GITHUB_ENV" ;;
+            qa)  echo "VERCEL_PROJECT_ID=${{ secrets.VERCEL_PROJECT_ID_USER_QA }}" >> "$GITHUB_ENV" ;;
+            prd) echo "VERCEL_PROJECT_ID=${{ secrets.VERCEL_PROJECT_ID_USER_PRD }}" >> "$GITHUB_ENV" ;;
+            *) echo "Unsupported branch: ${GITHUB_REF_NAME}" ; exit 1 ;;
+          esac
+
+      - name: Pull Vercel env (production for this project)
+        run: pnpm dlx vercel@latest pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Build (Vercel)
+        run: pnpm dlx vercel@latest build --prod --token="$VERCEL_TOKEN"
+
+      - name: Deploy (Vercel)
+        run: pnpm dlx vercel@latest deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+
+  deploy-admin:
+    name: Deploy admin app
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: apps/admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies (monorepo)
+        run: pnpm install --frozen-lockfile
+        working-directory: .
+
+      - name: Select Vercel project (admin)
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            dev) echo "VERCEL_PROJECT_ID=${{ secrets.VERCEL_PROJECT_ID_ADMIN_DEV }}" >> "$GITHUB_ENV" ;;
+            qa)  echo "VERCEL_PROJECT_ID=${{ secrets.VERCEL_PROJECT_ID_ADMIN_QA }}" >> "$GITHUB_ENV" ;;
+            prd) echo "VERCEL_PROJECT_ID=${{ secrets.VERCEL_PROJECT_ID_ADMIN_PRD }}" >> "$GITHUB_ENV" ;;
+            *) echo "Unsupported branch: ${GITHUB_REF_NAME}" ; exit 1 ;;
+          esac
+
+      - name: Pull Vercel env (production for this project)
+        run: pnpm dlx vercel@latest pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Build (Vercel)
+        run: pnpm dlx vercel@latest build --prod --token="$VERCEL_TOKEN"
+
+      - name: Deploy (Vercel)
+        run: pnpm dlx vercel@latest deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+

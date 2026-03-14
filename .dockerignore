@@ -1,0 +1,13 @@
+**/node_modules
+**/.turbo
+**/.next
+**/dist
+**/build
+**/.cache
+**/.vercel
+.git
+.github
+*.log
+Dockerfile
+docker-compose.yml
+

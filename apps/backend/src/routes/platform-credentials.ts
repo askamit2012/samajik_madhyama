@@ -1,22 +1,25 @@
 import { Router } from "express"
 import { db, schema } from "@repo/database"
 import { eq } from "drizzle-orm"
+import { authenticate, requireSuperAdmin, AuthRequest } from "../middleware/auth"
 
 const router: Router = Router()
 
-// Get all platform credentials
-router.get("/", async (req, res) => {
+// GET — all admins can read; mask secret
+router.get("/", authenticate, async (req: AuthRequest, res) => {
   try {
     const credentials = await db.select().from(schema.platformCredentials)
-    res.json(credentials)
+    // Mask the secret in responses
+    const masked = credentials.map(c => ({ ...c, appSecret: c.appSecret ? "••••••••••••" : null }))
+    res.json(masked)
   } catch (error) {
     console.error("Failed to fetch platform credentials:", error)
     res.status(500).json({ error: "Failed to fetch platform credentials" })
   }
 })
 
-// Create or update platform credentials
-router.post("/", async (req, res) => {
+// POST — superadmin only
+router.post("/", authenticate, requireSuperAdmin, async (req: AuthRequest, res) => {
   try {
     const { platform, appId, appSecret } = req.body
     
@@ -45,8 +48,8 @@ router.post("/", async (req, res) => {
   }
 })
 
-// Delete a platform credential
-router.delete("/:platform", async (req, res) => {
+// DELETE — superadmin only
+router.delete("/:platform", authenticate, requireSuperAdmin, async (req: AuthRequest, res) => {
   try {
     const { platform } = req.params
     await db.delete(schema.platformCredentials).where(eq(schema.platformCredentials.platform, platform))

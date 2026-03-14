@@ -2,6 +2,7 @@ import { Router } from "express"
 import { db, schema } from "@repo/database"
 import { eq, and } from "drizzle-orm"
 import { authenticate, AuthRequest } from "../middleware/auth"
+import { validate, postSchema } from "../middleware/validate"
 
 const router: Router = Router()
 
@@ -96,7 +97,7 @@ router.get("/", authenticate, async (req: AuthRequest, res) => {
 })
 
 // POST /posts — create a post
-router.post("/", authenticate, async (req: AuthRequest, res) => {
+router.post("/", authenticate, validate(postSchema), async (req: AuthRequest, res) => {
   try {
     const { content, platform, status, scheduledFor } = req.body
     const newPost = await db.insert(schema.posts).values({
@@ -114,7 +115,7 @@ router.post("/", authenticate, async (req: AuthRequest, res) => {
 })
 
 // PUT /posts/:id — update a post
-router.put("/:id", authenticate, async (req: AuthRequest, res) => {
+router.put("/:id", authenticate, validate(postSchema.partial()), async (req: AuthRequest, res) => {
   try {
     const { content, platform, status, scheduledFor } = req.body
     const updated = await db.update(schema.posts).set({

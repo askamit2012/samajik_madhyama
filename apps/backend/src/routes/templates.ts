@@ -1,27 +1,27 @@
 import { Router } from "express"
 import { db, schema } from "@repo/database"
-import { eq } from "drizzle-orm"
+import { eq, and } from "drizzle-orm"
+import { authenticate, AuthRequest } from "../middleware/auth"
+import { validate, templateSchema } from "../middleware/validate"
 
 const router: Router = Router()
 
-// Default owner hardcoded for MVP until proper auth
-const getTempUserId = () => 1 
-
-router.get("/", async (req, res) => {
+router.get("/", authenticate, async (req: AuthRequest, res) => {
   try {
-    const templates = await db.select().from(schema.emailTemplates).where(eq(schema.emailTemplates.ownerId, getTempUserId()))
+    const templates = await db.select().from(schema.emailTemplates)
+      .where(eq(schema.emailTemplates.ownerId, req.user!.id))
     res.json(templates)
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch templates" })
   }
 })
 
-router.post("/", async (req, res) => {
+router.post("/", authenticate, validate(templateSchema), async (req: AuthRequest, res) => {
   try {
     const { name, subject, htmlContent, plainText } = req.body
     const [newTemplate] = await db
       .insert(schema.emailTemplates)
-      .values({ name, subject, htmlContent, plainText, ownerId: getTempUserId() })
+      .values({ name, subject, htmlContent, plainText, ownerId: req.user!.id })
       .returning()
     res.status(201).json(newTemplate)
   } catch (error) {
@@ -29,14 +29,13 @@ router.post("/", async (req, res) => {
   }
 })
 
-router.put("/:id", async (req, res) => {
+router.put("/:id", authenticate, validate(templateSchema.partial()), async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params
     const { name, subject, htmlContent, plainText } = req.body
     const [updatedTemplate] = await db
       .update(schema.emailTemplates)
       .set({ name, subject, htmlContent, plainText, updatedAt: new Date() })
-      .where(eq(schema.emailTemplates.id, parseInt(id)))
+      .where(and(eq(schema.emailTemplates.id, parseInt(req.params.id)), eq(schema.emailTemplates.ownerId, req.user!.id)))
       .returning()
     res.json(updatedTemplate)
   } catch (error) {
@@ -44,10 +43,10 @@ router.put("/:id", async (req, res) => {
   }
 })
 
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", authenticate, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params
-    await db.delete(schema.emailTemplates).where(eq(schema.emailTemplates.id, parseInt(id)))
+    await db.delete(schema.emailTemplates)
+      .where(and(eq(schema.emailTemplates.id, parseInt(req.params.id)), eq(schema.emailTemplates.ownerId, req.user!.id)))
     res.status(204).send()
   } catch (error) {
     res.status(500).json({ error: "Failed to delete template" })

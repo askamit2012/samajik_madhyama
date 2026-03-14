@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [ dev, qa, prd ]
+  pull_request:
+    branches: [ dev, qa, prd ]
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      
+      - name: Install dependencies
+        run: pnpm install
+        
+      - name: Lint
+        run: pnpm --filter backend lint
+        
+      - name: Run Tests
+        run: pnpm --filter backend test

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useAuth } from "../../../components/auth-provider"
+import { api } from "../../../lib/api"
 import { TrendingUp, BarChart3, CheckCircle, Clock, FileEdit, AlertCircle, Facebook, Instagram, Linkedin, Twitter, Globe } from "lucide-react"
 
 interface Post {
@@ -49,10 +50,9 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     if (!token) return
-    const h = { Authorization: `Bearer ${token}` }
     Promise.all([
-      fetch("http://localhost:4000/posts", { headers: h }).then(r => r.json()),
-      fetch("http://localhost:4000/oauth/connections", { headers: h }).then(r => r.json()),
+      api.get<Post[]>("/posts", token),
+      api.get<{ platform: string }[]>("/oauth/connections", token),
     ]).then(([postsData, connsData]) => {
       setPosts(Array.isArray(postsData) ? postsData : [])
       setConnections(Array.isArray(connsData) ? connsData : [])
@@ -89,75 +89,98 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
-        <p className="text-muted-foreground mt-1">Track the performance of your social content</p>
+    <div className="p-8 max-w-6xl mx-auto space-y-12 animate-fade-in">
+      <div className="animate-slide-up">
+        <div className="flex items-center gap-2 text-primary font-bold mb-1">
+          <TrendingUp className="h-4 w-4" />
+          <span className="text-xs uppercase tracking-[0.2em]">Insights Central</span>
+        </div>
+        <h1 className="text-4xl font-black tracking-tight">Social <span className="gradient-text">Analytics</span></h1>
+        <p className="text-muted-foreground text-lg mt-1 font-medium italic opacity-70">"You can't manage what you can't measure."</p>
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 stagger-children">
         {[
-          { label: "Published", value: statusCounts.published, icon: CheckCircle, color: "text-emerald-500", bg: "bg-emerald-500/10" },
-          { label: "Scheduled", value: statusCounts.scheduled, icon: Clock, color: "text-blue-500", bg: "bg-blue-500/10" },
-          { label: "Drafts", value: statusCounts.draft, icon: FileEdit, color: "text-violet-500", bg: "bg-violet-500/10" },
-          { label: "Failed", value: statusCounts.failed, icon: AlertCircle, color: "text-red-500", bg: "bg-red-500/10" },
-        ].map(({ label, value, icon: Icon, color, bg }) => (
-          <div key={label} className="bg-card border border-border rounded-xl p-5 shadow-sm">
-            <div className={`inline-flex p-2 rounded-lg ${bg} mb-3`}>
-              <Icon className={`h-4 w-4 ${color}`} />
+          { label: "Published Content", value: statusCounts.published, icon: CheckCircle, color: "text-emerald-500", bg: "bg-emerald-500/10", shadow: "shadow-emerald-500/5" },
+          { label: "Planned Posts", value: statusCounts.scheduled, icon: Clock, color: "text-blue-500", bg: "bg-blue-500/10", shadow: "shadow-blue-500/5" },
+          { label: "Future Drafts", value: statusCounts.draft, icon: FileEdit, color: "text-violet-500", bg: "bg-violet-500/10", shadow: "shadow-violet-500/5" },
+          { label: "Failed Attempts", value: statusCounts.failed, icon: AlertCircle, color: "text-red-500", bg: "bg-red-500/10", shadow: "shadow-red-500/5" },
+        ].map(({ label, value, icon: Icon, color, bg, shadow }) => (
+          <div key={label} className={`group bg-white border border-border rounded-[2.5rem] p-7 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-500 ${shadow}`}>
+            <div className={`inline-flex p-3 rounded-2xl ${bg} mb-5 group-hover:rotate-6 transition-transform`}>
+              <Icon className={`h-5 w-5 ${color}`} />
             </div>
-            <div className="text-3xl font-bold">{loading ? "—" : value}</div>
-            <div className="text-sm text-muted-foreground mt-0.5">{label}</div>
+            <div className="text-4xl font-black tracking-tight">{loading ? "..." : value.toLocaleString()}</div>
+            <div className="text-xs font-black uppercase tracking-widest text-slate-400 mt-2">{label}</div>
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Monthly Activity Chart */}
-        <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
-          <div className="flex items-center gap-2 mb-6">
-            <BarChart3 className="h-5 w-5 text-primary" />
-            <h2 className="font-semibold">Posts per Month</h2>
+        <div className="lg:col-span-2 bg-white border border-border rounded-[3rem] p-8 shadow-sm">
+          <div className="flex items-center justify-between mb-10">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                 <BarChart3 className="h-5 w-5" />
+              </div>
+              <h2 className="text-xl font-black tracking-tight">Publication Velocity</h2>
+            </div>
+            <div className="text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full bg-slate-100 text-slate-500">6 Month Window</div>
           </div>
-          {loading ? (
-            <div className="h-32 bg-muted/30 rounded-lg animate-pulse" />
-          ) : posts.length === 0 ? (
-            <div className="h-32 flex items-center justify-center text-muted-foreground text-sm">No post data yet</div>
-          ) : (
-            <SimpleBarChart data={monthlyData} />
-          )}
+          <div className="min-h-[220px] flex items-end">
+            {loading ? (
+              <div className="h-40 w-full bg-slate-50 rounded-[2rem] animate-shimmer" />
+            ) : posts.length === 0 ? (
+              <div className="h-40 w-full flex flex-col items-center justify-center text-muted-foreground gap-2">
+                 <div className="h-14 w-14 rounded-2xl bg-slate-50 flex items-center justify-center opacity-30">
+                    <BarChart3 className="h-6 w-6" />
+                 </div>
+                 <p className="text-sm font-bold">No publication data available yet</p>
+              </div>
+            ) : (
+              <div className="flex-1">
+                 <SimpleBarChart data={monthlyData} />
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Platform Breakdown */}
-        <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
-          <div className="flex items-center gap-2 mb-6">
-            <TrendingUp className="h-5 w-5 text-primary" />
-            <h2 className="font-semibold">Platform Breakdown</h2>
+        <div className="bg-slate-900 text-white border border-slate-800 rounded-[3rem] p-8 shadow-2xl">
+          <div className="flex items-center gap-3 mb-10">
+            <div className="h-10 w-10 rounded-2xl bg-white/10 flex items-center justify-center text-white">
+               <TrendingUp className="h-5 w-5" />
+            </div>
+            <h2 className="text-xl font-black tracking-tight">Channel Share</h2>
           </div>
           {loading ? (
-            <div className="space-y-3">
-              {[1,2,3].map(i => <div key={i} className="h-10 bg-muted/30 rounded animate-pulse" />)}
+            <div className="space-y-6">
+              {[1,2,3].map(i => <div key={i} className="h-12 bg-white/5 rounded-2xl animate-pulse" />)}
             </div>
           ) : platformStats.length === 0 ? (
-            <div className="h-32 flex items-center justify-center text-muted-foreground text-sm">No platform data yet</div>
+            <div className="h-40 flex items-center justify-center text-slate-500 font-bold">No active channels</div>
           ) : (
-            <div className="space-y-3">
-              {platformStats.map(({ platform, total, published }) => {
+            <div className="space-y-8">
+              {platformStats.map(({ platform, total, published }, i) => {
                 const cfg = PLATFORM_CONFIG[platform]
                 const PIcon = cfg?.Icon || Globe
                 const pct = total > 0 ? Math.round((published / total) * 100) : 0
                 return (
-                  <div key={platform} className="space-y-1.5">
+                  <div key={platform} className="space-y-3 animate-slide-in-left" style={{ animationDelay: `${i * 100}ms` }}>
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <PIcon size={14} color={cfg?.color} />
-                        <span className="text-sm font-medium">{cfg?.label || platform}</span>
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${cfg?.color}22` }}>
+                           <PIcon size={16} color={cfg?.color} />
+                        </div>
+                        <span className="text-sm font-bold tracking-tight">{cfg?.label || platform}</span>
                       </div>
-                      <span className="text-xs text-muted-foreground">{total} posts · {published} published</span>
+                      <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">{published} / {total} PUB</span>
                     </div>
-                    <div className="h-2 bg-muted/40 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: cfg?.color }} />
+                    <div className="relative h-2.5 bg-white/5 rounded-full overflow-hidden">
+                      <div className="absolute top-0 left-0 h-full rounded-full transition-all duration-1000 ease-out" 
+                           style={{ width: `${pct}%`, backgroundColor: cfg?.color }} />
                     </div>
                   </div>
                 )
@@ -168,39 +191,68 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Post history table */}
-      <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-border">
-          <h2 className="font-semibold">Post History</h2>
+      <div className="bg-white border border-border rounded-[3rem] shadow-sm overflow-hidden animate-slide-up" style={{ animationDelay: '400ms' }}>
+        <div className="p-8 border-b border-border flex items-center justify-between">
+          <h2 className="text-xl font-black tracking-tight">Engagement History</h2>
+          <div className="px-4 py-1.5 bg-slate-50 border border-border rounded-full text-[10px] font-black uppercase tracking-widest text-slate-500">Latest 20 Operations</div>
         </div>
         {loading ? (
-          <div className="p-8 text-center text-muted-foreground">Loading...</div>
+          <div className="p-20 flex flex-col items-center gap-4">
+             <div className="h-10 w-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+             <p className="text-sm font-bold text-slate-400">Synchronizing History...</p>
+          </div>
         ) : posts.length === 0 ? (
-          <div className="p-12 text-center text-muted-foreground text-sm">No posts yet</div>
+          <div className="p-24 text-center">
+            <div className="h-20 w-20 bg-slate-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 text-slate-300">
+               <FileEdit size={32} />
+            </div>
+            <h3 className="text-lg font-black tracking-tight">History is quiet.</h3>
+            <p className="text-muted-foreground font-medium mt-1">Start publishing to see your operational timeline here.</p>
+          </div>
         ) : (
-          <div className="divide-y divide-border">
-            {posts.slice(0, 20).map(post => {
-              const cfg = PLATFORM_CONFIG[post.platform]
-              const PIcon = cfg?.Icon || Globe
-              return (
-                <div key={post.id} className="flex items-start gap-4 p-4 hover:bg-muted/10 transition-colors">
-                  <div className="mt-0.5 shrink-0">
-                    <PIcon size={16} color={cfg?.color} />
-                  </div>
-                  <p className="text-sm flex-1 line-clamp-1 text-foreground">{post.content}</p>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${
-                      post.status === "published" ? "bg-emerald-500/10 text-emerald-600" :
-                      post.status === "scheduled" ? "bg-blue-500/10 text-blue-600" :
-                      post.status === "failed" ? "bg-red-500/10 text-red-600" :
-                      "bg-muted text-muted-foreground"
-                    }`}>{post.status}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(post.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </span>
-                  </div>
-                </div>
-              )
-            })}
+          <div className="overflow-x-auto">
+             <table className="w-full text-left">
+                <thead>
+                   <tr className="bg-slate-50/50">
+                      <th className="px-8 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Content Preview</th>
+                      <th className="px-8 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Channel</th>
+                      <th className="px-8 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Status</th>
+                      <th className="px-8 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Timestamp</th>
+                   </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {posts.slice(0, 20).map((post, i) => {
+                    const cfg = PLATFORM_CONFIG[post.platform]
+                    const PIcon = cfg?.Icon || Globe
+                    return (
+                      <tr key={post.id} className="group hover:bg-slate-50/50 transition-colors">
+                        <td className="px-8 py-5">
+                           <p className="text-sm font-bold text-slate-700 line-clamp-1 group-hover:text-slate-900 transition-colors">{post.content}</p>
+                        </td>
+                        <td className="px-8 py-5">
+                           <div className="flex items-center gap-2">
+                              <PIcon size={14} color={cfg?.color} />
+                              <span className="text-xs font-bold text-slate-600">{cfg?.label || post.platform}</span>
+                           </div>
+                        </td>
+                        <td className="px-8 py-5">
+                           <span className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full ${
+                             post.status === "published" ? "bg-emerald-50 text-emerald-600" :
+                             post.status === "scheduled" ? "bg-blue-50 text-blue-600" :
+                             post.status === "failed" ? "bg-red-50 text-red-600" :
+                             "bg-slate-100 text-slate-500"
+                           }`}>{post.status}</span>
+                        </td>
+                        <td className="px-8 py-5">
+                           <span className="text-xs font-bold text-slate-400">
+                             {new Date(post.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: '2-digit', minute: '2-digit' })}
+                           </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+             </table>
           </div>
         )}
       </div>

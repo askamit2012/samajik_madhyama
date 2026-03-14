@@ -1,42 +1,25 @@
 "use client"
-
 import { useState } from "react"
 import Link from "next/link"
 import { Button } from "@repo/ui"
 import { useAuth } from "../../components/auth-provider"
+import { api } from "../../lib/api"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
-  
   const { login } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError("")
-    setLoading(true)
-    
+    e.preventDefault(); setError(""); setLoading(true)
     try {
-      const res = await fetch("http://localhost:4000/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password })
-      })
-      
-      const data = await res.json()
-      
-      if (res.ok) {
-        login(data.token, data.user)
-      } else {
-        setError(data.error || "Login failed")
-      }
-    } catch (err) {
-      setError("An unexpected error occurred.")
-    } finally {
-      setLoading(false)
-    }
+      const data = await api.post<{ token: string; user: any }>("/auth/login", { email, password })
+      login(data.token, data.user)
+    } catch (err: any) {
+      setError(err.message || "Login failed")
+    } finally { setLoading(false) }
   }
 
   return (

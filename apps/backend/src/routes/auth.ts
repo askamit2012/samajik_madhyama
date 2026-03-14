@@ -4,18 +4,15 @@ import { eq } from "drizzle-orm"
 import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
 import { authenticate, AuthRequest } from "../middleware/auth"
+import { validate, signupSchema, loginSchema } from "../middleware/validate"
 
 const router: Router = Router()
 const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_for_dev_only"
 
-router.post("/signup", async (req, res) => {
+router.post("/signup", validate(signupSchema), async (req, res) => {
   try {
     const { name, email, password } = req.body
-    
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: "Missing required fields" })
-    }
-    
+
     // Check if user exists
     const existing = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1)
     if (existing.length > 0) {
@@ -45,14 +42,10 @@ router.post("/signup", async (req, res) => {
   }
 })
 
-router.post("/login", async (req, res) => {
+router.post("/login", validate(loginSchema), async (req, res) => {
   try {
     const { email, password } = req.body
-    
-    if (!email || !password) {
-      return res.status(400).json({ error: "Missing required fields" })
-    }
-    
+
     const users = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1)
     if (users.length === 0) {
       return res.status(401).json({ error: "Invalid credentials" })

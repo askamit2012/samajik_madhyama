@@ -140,6 +140,20 @@ The Express backend exposes the following routes:
 
 ---
 
+## 🚢 Deployment (Hybrid)
+
+This repo uses a **hybrid** deployment strategy:
+
+- `apps/user` and `apps/admin` deploy to **Vercel** (GitHub Actions on `dev` / `qa` / `prd`).
+- `apps/backend` requires an **always-on** runtime (workers + schedulers).
+
+Docs:
+
+- `deploy/strategy.yaml` (source of truth)
+- `docs/deployment/README.md`
+
+---
+
 ## 🛠️ Development Scripts
 
 ```bash

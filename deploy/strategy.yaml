@@ -1,0 +1,68 @@
+version: 1
+strategy: hybrid
+
+# This file is the single source of truth for how environments map to deployments.
+# Keep names stable so CI/CD and docs can reference them.
+
+apps:
+  user:
+    path: apps/user
+    runtime: vercel
+    env_var_api_base: NEXT_PUBLIC_API_URL
+  admin:
+    path: apps/admin
+    runtime: vercel
+    env_var_api_base: VITE_API_URL
+  backend:
+    path: apps/backend
+    runtime: always_on
+    notes:
+      - Requires long-lived BullMQ workers + scheduler intervals
+      - Not suitable for Vercel Functions without refactor
+    cloud_run:
+      artifact_repo: containers # Artifact Registry repo name (Docker)
+      region: asia-south1
+      api_service_prefix: backend
+      worker_service_prefix: backend-worker
+
+environments:
+  dev:
+    branch: dev
+    user:
+      vercel_project: user-dev
+    admin:
+      vercel_project: admin-dev
+    backend:
+      service: backend-dev
+      worker_service: backend-worker-dev
+      base_url: https://api-dev.example.com # TODO
+  qa:
+    branch: qa
+    user:
+      vercel_project: user-qa
+    admin:
+      vercel_project: admin-qa
+    backend:
+      service: backend-qa
+      worker_service: backend-worker-qa
+      base_url: https://api-qa.example.com # TODO
+  prd:
+    branch: prd
+    user:
+      vercel_project: user-prd
+    admin:
+      vercel_project: admin-prd
+    backend:
+      service: backend-prd
+      worker_service: backend-worker-prd
+      base_url: https://api.example.com # TODO
+
+data:
+  postgres:
+    provider: neon_or_supabase # pick one
+    env_var: DATABASE_URL
+  redis:
+    provider: upstash
+    env_var: REDIS_URL
+  media:
+    provider: r2_or_vercel_blob # pick one

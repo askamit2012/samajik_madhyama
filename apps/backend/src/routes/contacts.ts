@@ -1,27 +1,27 @@
 import { Router } from "express"
 import { db, schema } from "@repo/database"
-import { eq } from "drizzle-orm"
+import { eq, and } from "drizzle-orm"
+import { authenticate, AuthRequest } from "../middleware/auth"
+import { validate, contactSchema } from "../middleware/validate"
 
 const router: Router = Router()
 
-// Default owner hardcoded for MVP until proper auth
-const getTempUserId = () => 1 
-
-router.get("/", async (req, res) => {
+router.get("/", authenticate, async (req: AuthRequest, res) => {
   try {
-    const contacts = await db.select().from(schema.contacts).where(eq(schema.contacts.ownerId, getTempUserId()))
+    const contacts = await db.select().from(schema.contacts)
+      .where(eq(schema.contacts.ownerId, req.user!.id))
     res.json(contacts)
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch contacts" })
   }
 })
 
-router.post("/", async (req, res) => {
+router.post("/", authenticate, validate(contactSchema), async (req: AuthRequest, res) => {
   try {
     const { name, email, tags } = req.body
     const [newContact] = await db
       .insert(schema.contacts)
-      .values({ name, email, tags, ownerId: getTempUserId() })
+      .values({ name, email, tags, ownerId: req.user!.id })
       .returning()
     res.status(201).json(newContact)
   } catch (error) {
@@ -29,14 +29,13 @@ router.post("/", async (req, res) => {
   }
 })
 
-router.put("/:id", async (req, res) => {
+router.put("/:id", authenticate, validate(contactSchema.partial()), async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params
     const { name, email, tags } = req.body
     const [updatedContact] = await db
       .update(schema.contacts)
       .set({ name, email, tags })
-      .where(eq(schema.contacts.id, parseInt(id)))
+      .where(and(eq(schema.contacts.id, parseInt(req.params.id)), eq(schema.contacts.ownerId, req.user!.id)))
       .returning()
     res.json(updatedContact)
   } catch (error) {
@@ -44,10 +43,10 @@ router.put("/:id", async (req, res) => {
   }
 })
 
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", authenticate, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params
-    await db.delete(schema.contacts).where(eq(schema.contacts.id, parseInt(id)))
+    await db.delete(schema.contacts)
+      .where(and(eq(schema.contacts.id, parseInt(req.params.id)), eq(schema.contacts.ownerId, req.user!.id)))
     res.status(204).send()
   } catch (error) {
     res.status(500).json({ error: "Failed to delete contact" })

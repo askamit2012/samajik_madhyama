@@ -1,0 +1,146 @@
+name: Deploy (Cloud Run - backend)
+
+on:
+  push:
+    branches: [ dev, qa, prd ]
+  workflow_dispatch: {}
+
+concurrency:
+  group: cloudrun-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-backend-api:
+    name: Deploy backend API
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ secrets.GCP_REGION }}
+      GCP_ARTIFACT_REPO: ${{ secrets.GCP_ARTIFACT_REPO }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Select environment (branch -> service/secrets)
+        shell: bash
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            dev)
+              echo "ENV_SUFFIX=DEV" >> "$GITHUB_ENV"
+              echo "SERVICE_NAME=backend-dev" >> "$GITHUB_ENV"
+              ;;
+            qa)
+              echo "ENV_SUFFIX=QA" >> "$GITHUB_ENV"
+              echo "SERVICE_NAME=backend-qa" >> "$GITHUB_ENV"
+              ;;
+            prd)
+              echo "ENV_SUFFIX=PRD" >> "$GITHUB_ENV"
+              echo "SERVICE_NAME=backend-prd" >> "$GITHUB_ENV"
+              ;;
+            *)
+              echo "Unsupported branch: ${GITHUB_REF_NAME}"
+              exit 1
+              ;;
+          esac
+
+      - name: Configure Docker auth (Artifact Registry)
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - name: Build + push image
+        shell: bash
+        run: |
+          IMAGE_URI="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/backend:${GITHUB_SHA}"
+          echo "IMAGE_URI=${IMAGE_URI}" >> "$GITHUB_ENV"
+          docker build -f apps/backend/Dockerfile -t "${IMAGE_URI}" .
+          docker push "${IMAGE_URI}"
+
+      - name: Deploy to Cloud Run (API mode)
+        shell: bash
+        run: |
+          gcloud run deploy "${SERVICE_NAME}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --platform managed \
+            --image "${IMAGE_URI}" \
+            --allow-unauthenticated \
+            --set-env-vars "APP_MODE=api,NODE_ENV=production" \
+            --set-secrets "DATABASE_URL=DATABASE_URL_${ENV_SUFFIX}:latest,REDIS_URL=REDIS_URL_${ENV_SUFFIX}:latest,JWT_SECRET=JWT_SECRET_${ENV_SUFFIX}:latest,GEMINI_API_KEY=GEMINI_API_KEY_${ENV_SUFFIX}:latest"
+
+  deploy-backend-worker:
+    name: Deploy backend worker (optional)
+    runs-on: ubuntu-latest
+    if: ${{ vars.DEPLOY_BACKEND_WORKER == 'true' }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ secrets.GCP_REGION }}
+      GCP_ARTIFACT_REPO: ${{ secrets.GCP_ARTIFACT_REPO }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Select environment (branch -> service/secrets)
+        shell: bash
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            dev)
+              echo "ENV_SUFFIX=DEV" >> "$GITHUB_ENV"
+              echo "SERVICE_NAME=backend-worker-dev" >> "$GITHUB_ENV"
+              ;;
+            qa)
+              echo "ENV_SUFFIX=QA" >> "$GITHUB_ENV"
+              echo "SERVICE_NAME=backend-worker-qa" >> "$GITHUB_ENV"
+              ;;
+            prd)
+              echo "ENV_SUFFIX=PRD" >> "$GITHUB_ENV"
+              echo "SERVICE_NAME=backend-worker-prd" >> "$GITHUB_ENV"
+              ;;
+            *)
+              echo "Unsupported branch: ${GITHUB_REF_NAME}"
+              exit 1
+              ;;
+          esac
+
+      - name: Configure Docker auth (Artifact Registry)
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - name: Build + push image
+        shell: bash
+        run: |
+          IMAGE_URI="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/backend:${GITHUB_SHA}"
+          echo "IMAGE_URI=${IMAGE_URI}" >> "$GITHUB_ENV"
+          docker build -f apps/backend/Dockerfile -t "${IMAGE_URI}" .
+          docker push "${IMAGE_URI}"
+
+      - name: Deploy to Cloud Run (worker mode)
+        shell: bash
+        run: |
+          gcloud run deploy "${SERVICE_NAME}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --platform managed \
+            --image "${IMAGE_URI}" \
+            --no-allow-unauthenticated \
+            --set-env-vars "APP_MODE=worker,NODE_ENV=production" \
+            --set-secrets "DATABASE_URL=DATABASE_URL_${ENV_SUFFIX}:latest,REDIS_URL=REDIS_URL_${ENV_SUFFIX}:latest,JWT_SECRET=JWT_SECRET_${ENV_SUFFIX}:latest,GEMINI_API_KEY=GEMINI_API_KEY_${ENV_SUFFIX}:latest" \
+            --max-instances 1
+

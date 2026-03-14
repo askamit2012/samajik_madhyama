@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp } from "drizzle-orm/pg-core"
+import { pgTable, text, serial, timestamp, integer } from "drizzle-orm/pg-core"
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -12,6 +12,7 @@ export const users = pgTable("users", {
 export const posts = pgTable("posts", {
   id: serial("id").primaryKey(),
   content: text("content").notNull(),
+  mediaUrl: text("media_url"), // URL to generated/uploaded image
   authorId: serial("author_id").references(() => users.id).notNull(),
   platform: text("platform").notNull(), // "facebook", "linkedin", "twitter", "instagram"
   status: text("status").default("draft").notNull(), // "draft", "scheduled", "published", "failed"
@@ -82,4 +83,29 @@ export const campaignRecipients = pgTable("campaign_recipients", {
   status: text("status").default("pending").notNull(), // 'pending', 'sent', 'delivered', 'failed'
   sentAt: timestamp("sent_at"),
   error: text("error"),
+})
+
+export const aiModels = pgTable("ai_models", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  provider: text("provider").notNull(), // 'gemini', 'openai', 'replicate'
+  type: text("type").notNull(), // 'text', 'image'
+  tier: text("tier").notNull(), // 'free', 'paid'
+  isActive: text("is_active").default("true").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+})
+
+export const userAiPreferences = pgTable("user_ai_preferences", {
+  userId: integer("user_id").references(() => users.id).primaryKey(),
+  preferredTier: text("preferred_tier").default("free").notNull(), // 'free', 'paid'
+  textModelId: integer("text_model_id").references(() => aiModels.id),
+  imageModelId: integer("image_model_id").references(() => aiModels.id),
+})
+
+export const aiUsageLogs = pgTable("ai_usage_logs", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  modelId: integer("model_id").references(() => aiModels.id).notNull(),
+  usageCount: integer("usage_count").default(0).notNull(),
+  resetAt: timestamp("reset_at").defaultNow().notNull(),
 })
